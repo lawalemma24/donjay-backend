@@ -69,13 +69,13 @@ Welcome to the DonJay Autos backend API documentation. This platform facilitates
 - **Authentication**: JWT + bcryptjs
 - **Real-time Communication**: Socket.IO
 - **File Storage**: Cloudinary (via multer-storage-cloudinary)
-- **Email Service**: Nodemailer
+- **Email Service**: Resend
 - **Environment Management**: dotenv
 
 ### Key Integrations
 - **Cloudinary**: For image and file storage
 - **Socket.IO**: For real-time messaging and notifications
-- **Nodemailer**: For email notifications
+- **Resend**: For email notifications
 
 ## Getting Started
 
@@ -119,9 +119,9 @@ CLOUDINARY_CLOUD_NAME=your_cloud_name
 CLOUDINARY_API_KEY=your_api_key
 CLOUDINARY_API_SECRET=your_api_secret
 
-# Brevo (Sendinblue) API Configuration
-BREVO_API_KEY=your_brevo_api_key
-BREVO_SENDER_EMAIL=your_verified_sender_email@donjayautos.com
+# Resend API Configuration
+RESEND_API_KEY=your_resend_api_key
+RESEND_SENDER_EMAIL=your_verified_sender_email@donjayautos.com
 ```
 
 ## API Endpoints Overview

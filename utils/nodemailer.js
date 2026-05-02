@@ -1,130 +1,63 @@
-// utils/nodemailer.js
 import dotenv from "dotenv";
-import brevo from "@getbrevo/brevo";
+import { Resend } from "resend";
 
 dotenv.config();
 
-// Validate environment variables
-console.log('[EMAIL] Environment variables check:');
-console.log('[EMAIL] BREVO_API_KEY exists:', !!process.env.BREVO_API_KEY);
-console.log('[EMAIL] BREVO_API_KEY length:', process.env.BREVO_API_KEY ? process.env.BREVO_API_KEY.length : 0);
-console.log('[EMAIL] BREVO_SENDER_EMAIL:', process.env.BREVO_SENDER_EMAIL || 'NOT SET');
+const resend = new Resend(process.env.RESEND_API_KEY);
+const DEFAULT_SENDER = process.env.RESEND_SENDER_EMAIL || "DonJay Autos <onboarding@resend.dev>";
 
-// Check for missing required environment variables
-if (!process.env.BREVO_API_KEY) {
-  console.error('[EMAIL] ERROR: Missing BREVO_API_KEY environment variable');
-  throw new Error('BREVO_API_KEY is required for email functionality');
-}
-
-// Initialize Brevo API client
-const apiInstance = new brevo.TransactionalEmailsApi();
-apiInstance.setApiKey(brevo.TransactionalEmailsApiApiKeys.apiKey, process.env.BREVO_API_KEY);
-
-export const sendOTPEmail = async (email, content, subject) => {
+/**
+ * Sends an OTP email to the user
+ */
+export const sendOTPEmail = async (email, content, subject = "Your OTP Code") => {
   try {
-    // Handle case where subject is not provided (older usage)
-    const emailSubject = subject || "Your OTP Code";
+    const isHtml = typeof content === "string" && content.includes("<");
     
-    // Prepare email content
-    const textContent = typeof content === 'string' && emailSubject !== "Your OTP Code" 
-      ? content 
-      : `Your OTP code is ${content}. It is valid for 10 minutes.`;
-    
-    const htmlContent = typeof content === 'string' && content.includes('<') 
-      ? content 
-      : (emailSubject === "Your OTP Code" 
-        ? `<p>Your OTP code is <strong>${content}</strong>. It is valid for 10 minutes.</p>` 
-        : `<p>${content}</p>`);
+    const html = isHtml ? content : `<p>Your OTP code is <strong>${content}</strong>. It is valid for 10 minutes.</p>`;
+    const text = isHtml ? content.replace(/<[^>]*>?/gm, "") : `Your OTP code is ${content}. It is valid for 10 minutes.`;
 
-    // Create email object
-    const sendSmtpEmail = new brevo.SendSmtpEmail();
-    sendSmtpEmail.sender = { 
-      email: process.env.BREVO_SENDER_EMAIL || "noreply@donjayautos.com", 
-      name: "DonJay Autos" 
-    };
-    sendSmtpEmail.to = [{ email: email }];
-    sendSmtpEmail.subject = emailSubject;
-    sendSmtpEmail.textContent = textContent;
-    sendSmtpEmail.htmlContent = htmlContent;
-
-    console.log(`[EMAIL] Sending OTP email to ${email} from ${sendSmtpEmail.sender.email}`);
-    
-    const result = await apiInstance.sendTransacEmail(sendSmtpEmail);
-    console.log(`[EMAIL] OTP email sent successfully to ${email}`, result.messageId);
-    return result;
-  } catch (error) {
-    console.error(`[EMAIL] Failed to send OTP email to ${email}:`, {
-      status: error.response?.statusCode,
-      statusText: error.response?.statusText,
-      body: error.response?.body,
-      message: error.message,
-      code: error.code
+    const { data, error } = await resend.emails.send({
+      from: DEFAULT_SENDER,
+      to: [email],
+      subject,
+      html,
+      text,
     });
-    
-    // If it's a 401 error, provide more specific guidance
-    if (error.response?.statusCode === 401) {
-      console.error('[EMAIL] AUTHENTICATION FAILED - Troubleshooting steps:');
-      console.error('[EMAIL] 1. Check if BREVO_API_KEY is correct in .env file');
-      console.error('[EMAIL] 2. Verify that sender email is verified in Brevo dashboard');
-      console.error('[EMAIL] 3. Ensure API key has transactional email permissions');
-      console.error('[EMAIL] 4. Check if API key has expired');
-    }
-    
+
+    if (error) throw error;
+    return data;
+  } catch (error) {
+    console.error(`[Resend] Failed to send OTP to ${email}:`, error.message);
     throw error;
   }
 };
 
+/**
+ * Sends a password reset link to the user
+ */
 export const sendResetPasswordEmail = async (email, resetUrl) => {
   try {
-    // Create email object
-    const sendSmtpEmail = new brevo.SendSmtpEmail();
-    sendSmtpEmail.sender = { 
-      email: process.env.BREVO_SENDER_EMAIL || "noreply@donjayautos.com", 
-      name: "DonJay Autos" 
-    };
-    sendSmtpEmail.to = [{ email: email }];
-    sendSmtpEmail.subject = "Password Reset";
-    sendSmtpEmail.htmlContent = `
-      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-        <h2>Password Reset</h2>
-        <p>You requested to reset your password. Click the link below to reset it:</p>
-        <p>
-          <a href="${resetUrl}" style="background-color: #007bff; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px; display: inline-block;">
+    const { data, error } = await resend.emails.send({
+      from: DEFAULT_SENDER,
+      to: [email],
+      subject: "Password Reset",
+      html: `
+        <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto; color: #333;">
+          <h2 style="color: #007bff;">Password Reset</h2>
+          <p>You requested a password reset. Click the button below to continue:</p>
+          <a href="${resetUrl}" style="background: #007bff; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; display: inline-block; margin: 10px 0;">
             Reset Password
           </a>
-        </p>
-        <p><small>The link will expire in 1 hour.</small></p>
-        <p>If you didn't request this, please ignore this email.</p>
-      </div>
-    `;
-    sendSmtpEmail.textContent = `You requested to reset your password. Click the link below to reset it: ${resetUrl}
-
-The link will expire in 1 hour.
-
-If you didn't request this, please ignore this email.`;
-
-    console.log(`[EMAIL] Sending password reset email to ${email} from ${sendSmtpEmail.sender.email}`);
-    const result = await apiInstance.sendTransacEmail(sendSmtpEmail);
-    console.log(`[EMAIL] Password reset email sent successfully to ${email}`, result.messageId);
-    return result;
-  } catch (error) {
-    console.error(`[EMAIL] Failed to send password reset email to ${email}:`, {
-      status: error.response?.statusCode,
-      statusText: error.response?.statusText,
-      body: error.response?.body,
-      message: error.message,
-      code: error.code
+          <p><small style="color: #666;">This link expires in 1 hour. If you didn't request this, please ignore this email.</small></p>
+        </div>
+      `,
+      text: `Reset your password here: ${resetUrl}\n\nThis link expires in 1 hour.`,
     });
-    
-    // If it's a 401 error, provide more specific guidance
-    if (error.response?.statusCode === 401) {
-      console.error('[EMAIL] AUTHENTICATION FAILED - Troubleshooting steps:');
-      console.error('[EMAIL] 1. Check if BREVO_API_KEY is correct in .env file');
-      console.error('[EMAIL] 2. Verify that sender email is verified in Brevo dashboard');
-      console.error('[EMAIL] 3. Ensure API key has transactional email permissions');
-      console.error('[EMAIL] 4. Check if API key has expired');
-    }
-    
+
+    if (error) throw error;
+    return data;
+  } catch (error) {
+    console.error(`[Resend] Failed to send reset email to ${email}:`, error.message);
     throw error;
   }
 };
